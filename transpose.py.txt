@@ -1,0 +1,34 @@
+from itertools import chain
+from pyspark.sql import DataFrame, SparkSession, SQLContext
+from pyspark import SparkContext, SparkConf
+sc = SparkContext()
+sqlContext = SQLContext(sc)
+
+def _sort_transpose_tuple(tup):
+    x, y = tup
+    return x, tuple(zip(*sorted(y, key=lambda v_k: v_k[1], reverse=False)))[0]
+
+
+def transpose(dfToTranspose):
+    if not isinstance(dfToTranspose, DataFrame):
+        raise TypeError('dfToTranspose should be a DataFrame, not a %s' 
+                        % type(dfToTranspose))
+
+    cols = dfToTranspose.columns
+    n_features = len(cols)
+
+    return dfToTranspose.rdd.flatMap(
+        lambda xs: chain(xs)).zipWithIndex().groupBy(
+        lambda val_idx: val_idx[1] % n_features).sortBy(
+        lambda grp_res: grp_res[0]).map(
+        lambda grp_res: _sort_transpose_tuple(grp_res)).map(
+        lambda key_col: key_col[1]).toDF()
+
+spark = SparkSession(sc)
+
+rdd = sc.parallelize([
+    ("f1", 0.0, 0.6, 0.5),
+    ("f2", 0.6, 0.7, 0.9)]).toDF(["s", "col_1", "col_2", "col_3"])
+rdd.show()
+
+transpose(rdd).show()
